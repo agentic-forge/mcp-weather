@@ -1,5 +1,6 @@
 """Weather MCP Server using FastMCP and Open-Meteo API."""
 
+from importlib.metadata import version
 from typing import Annotated, Literal
 
 from fastmcp import FastMCP
@@ -13,9 +14,13 @@ from .weather.models import (
     Location,
 )
 
+# Get package version
+__version__ = version("forge-mcp-weather")
+
 # Create FastMCP server
 mcp = FastMCP(
     name="Weather Server",
+    version=__version__,
     instructions="""Weather information server powered by Open-Meteo API.
 
 Available tools:
