@@ -182,6 +182,11 @@ async def get_air_quality(
 def main():
     """Run the weather MCP server."""
     import argparse
+    import logging
+
+    # Suppress benign ClosedResourceError on client disconnect
+    # This is a known issue in MCP SDK: https://github.com/jlowin/fastmcp/issues/2083
+    logging.getLogger("mcp.server.streamable_http").setLevel(logging.CRITICAL)
 
     parser = argparse.ArgumentParser(description="Weather MCP Server")
     parser.add_argument("--stdio", action="store_true", help="Use STDIO transport")
