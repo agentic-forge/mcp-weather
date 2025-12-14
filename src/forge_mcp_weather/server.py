@@ -184,6 +184,10 @@ def main():
     import argparse
     import logging
 
+    import uvicorn
+    from starlette.middleware import Middleware
+    from starlette.middleware.cors import CORSMiddleware
+
     # Suppress benign ClosedResourceError on client disconnect
     # This is a known issue in MCP SDK: https://github.com/jlowin/fastmcp/issues/2083
     logging.getLogger("mcp.server.streamable_http").setLevel(logging.CRITICAL)
@@ -197,8 +201,19 @@ def main():
     if args.stdio:
         mcp.run(transport="stdio")
     else:
+        # Add CORS middleware for browser-based clients
+        middleware = [
+            Middleware(
+                CORSMiddleware,
+                allow_origins=["*"],
+                allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+                allow_headers=["*"],
+                expose_headers=["mcp-session-id"],
+            )
+        ]
+        app = mcp.http_app(middleware=middleware)
         print(f"Starting Weather MCP Server on http://{args.host}:{args.port}/mcp")
-        mcp.run(transport="streamable-http", host=args.host, port=args.port)
+        uvicorn.run(app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
