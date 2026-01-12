@@ -217,7 +217,7 @@ def main():
         app = mcp.http_app(middleware=middleware)
 
         # Add health check endpoint for Docker healthchecks
-        async def health_check(request):
+        async def health_check(_request):
             return JSONResponse({"status": "healthy", "service": "mcp-weather"})
 
         app.routes.append(Route("/health", health_check))
