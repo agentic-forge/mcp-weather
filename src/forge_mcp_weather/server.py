@@ -201,6 +201,9 @@ def main():
     if args.stdio:
         mcp.run(transport="stdio")
     else:
+        from starlette.responses import JSONResponse
+        from starlette.routing import Route
+
         # Add CORS middleware for browser-based clients
         middleware = [
             Middleware(
@@ -212,6 +215,13 @@ def main():
             )
         ]
         app = mcp.http_app(middleware=middleware)
+
+        # Add health check endpoint for Docker healthchecks
+        async def health_check(request):
+            return JSONResponse({"status": "healthy", "service": "mcp-weather"})
+
+        app.routes.append(Route("/health", health_check))
+
         print(f"Starting Weather MCP Server on http://{args.host}:{args.port}/mcp")
         uvicorn.run(app, host=args.host, port=args.port)
 
