@@ -40,8 +40,10 @@ htmlcov/
 
 # Local development
 .claude-work/
+.claude/
 .env
 .env.local
+.envrc
 *.local
 
 # OS
