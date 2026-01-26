@@ -1,6 +1,5 @@
 """Weather MCP Server using FastMCP and Open-Meteo API."""
 
-from .server import main, mcp
 from .weather.client import APIError, LocationNotFoundError, OpenMeteoClient, WeatherError
 from .weather.models import (
     AirQuality,
@@ -18,9 +17,6 @@ from .weather.models import (
 __version__ = "0.1.0"
 
 __all__ = [
-    # Server
-    "mcp",
-    "main",
     # Client
     "OpenMeteoClient",
     # Exceptions

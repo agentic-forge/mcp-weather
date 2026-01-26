@@ -183,10 +183,17 @@ def main():
     """Run the weather MCP server."""
     import argparse
     import logging
+    import warnings
 
     import uvicorn
     from starlette.middleware import Middleware
     from starlette.middleware.cors import CORSMiddleware
+
+    # Suppress websockets deprecation warnings from uvicorn
+    # These are from uvicorn's websocket protocol using deprecated websockets APIs
+    # See: https://websockets.readthedocs.io/en/stable/howto/upgrade.html
+    warnings.filterwarnings("ignore", message="websockets.legacy is deprecated")
+    warnings.filterwarnings("ignore", message="websockets.server.WebSocketServerProtocol is deprecated")
 
     # Suppress benign ClosedResourceError on client disconnect
     # This is a known issue in MCP SDK: https://github.com/jlowin/fastmcp/issues/2083
@@ -196,6 +203,7 @@ def main():
     parser.add_argument("--stdio", action="store_true", help="Use STDIO transport")
     parser.add_argument("--port", type=int, default=8000, help="Port for HTTP transport")
     parser.add_argument("--host", default="0.0.0.0", help="Host for HTTP transport")
+    parser.add_argument("--reload", action="store_true", help="Enable auto-reload for development")
     args = parser.parse_args()
 
     if args.stdio:
@@ -223,7 +231,42 @@ def main():
         app.routes.append(Route("/health", health_check))
 
         print(f"Starting Weather MCP Server on http://{args.host}:{args.port}/mcp")
-        uvicorn.run(app, host=args.host, port=args.port)
+        if args.reload:
+            # For reload mode, use app string path
+            uvicorn.run(
+                "forge_mcp_weather.server:create_app",
+                factory=True,
+                host=args.host,
+                port=args.port,
+                reload=True,
+            )
+        else:
+            uvicorn.run(app, host=args.host, port=args.port)
+
+
+def create_app():
+    """Factory function for uvicorn reload mode."""
+    from starlette.middleware import Middleware
+    from starlette.middleware.cors import CORSMiddleware
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    middleware = [
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+            allow_headers=["*"],
+            expose_headers=["mcp-session-id"],
+        )
+    ]
+    app = mcp.http_app(middleware=middleware)
+
+    async def health_check(_request):
+        return JSONResponse({"status": "healthy", "service": "mcp-weather"})
+
+    app.routes.append(Route("/health", health_check))
+    return app
 
 
 if __name__ == "__main__":
