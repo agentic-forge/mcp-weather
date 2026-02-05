@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Location Picker - Dev Host</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: #1a1a2e;
+        color: #eee;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        background: #16213e;
+        padding: 1rem 2rem;
+        border-bottom: 1px solid #0f3460;
+      }
+      header h1 {
+        font-size: 1.25rem;
+        font-weight: 500;
+      }
+      header p {
+        font-size: 0.875rem;
+        color: #888;
+        margin-top: 0.25rem;
+      }
+      main {
+        flex: 1;
+        display: flex;
+        gap: 1rem;
+        padding: 1rem;
+      }
+      .app-container {
+        flex: 1;
+        background: #16213e;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #0f3460;
+      }
+      .app-container iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+      .debug-panel {
+        width: 360px;
+        background: #16213e;
+        border-radius: 8px;
+        border: 1px solid #0f3460;
+        display: flex;
+        flex-direction: column;
+      }
+      .debug-panel h2 {
+        font-size: 0.875rem;
+        font-weight: 500;
+        padding: 1rem;
+        border-bottom: 1px solid #0f3460;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .debug-panel h2::before {
+        content: '';
+        width: 8px;
+        height: 8px;
+        background: #4ade80;
+        border-radius: 50%;
+      }
+      .log-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.5rem;
+      }
+      .log-entry {
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 0.75rem;
+        padding: 0.5rem;
+        margin-bottom: 0.5rem;
+        border-radius: 4px;
+        background: #0f3460;
+      }
+      .log-entry.context-update {
+        background: #1e3a5f;
+        border-left: 3px solid #8b5cf6;
+      }
+      .log-entry .timestamp {
+        color: #666;
+        margin-bottom: 0.25rem;
+      }
+      .log-entry .method {
+        color: #8b5cf6;
+        font-weight: 600;
+      }
+      .log-entry pre {
+        margin-top: 0.5rem;
+        white-space: pre-wrap;
+        word-break: break-all;
+        color: #4ade80;
+      }
+      .context-display {
+        padding: 1rem;
+        border-top: 1px solid #0f3460;
+        background: #0f3460;
+      }
+      .context-display h3 {
+        font-size: 0.75rem;
+        color: #888;
+        margin-bottom: 0.5rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .context-display .value {
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 0.875rem;
+        color: #4ade80;
+      }
+      .context-display .empty {
+        color: #666;
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>MCP Apps Dev Host</h1>
+      <p>Testing environment for location-picker app</p>
+    </header>
+    <main>
+      <div class="app-container">
+        <!--
+          Dev mode: allow-scripts + allow-same-origin needed for Vite HMR and resource loading.
+          The browser warning about sandbox escape is expected in dev mode.
+          In production, forge-ui will serve the bundled single-file HTML from a different
+          origin, making the sandbox effective.
+        -->
+        <iframe id="app-frame" src="/index.html" sandbox="allow-scripts allow-same-origin"></iframe>
+      </div>
+      <div class="debug-panel">
+        <h2>Message Log</h2>
+        <div class="log-container" id="log-container"></div>
+        <div class="context-display">
+          <h3>Current Context</h3>
+          <div id="context-value" class="value empty">No location selected</div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const logContainer = document.getElementById('log-container')
+      const contextValue = document.getElementById('context-value')
+      const appFrame = document.getElementById('app-frame')
+
+      let currentContext = null
+      let messageId = 0
+
+      function log(method, data, isResponse = false) {
+        const entry = document.createElement('div')
+        entry.className = `log-entry ${method === 'updateModelContext' ? 'context-update' : ''}`
+
+        const timestamp = new Date().toLocaleTimeString()
+        const direction = isResponse ? '← Response' : '→ Request'
+
+        entry.innerHTML = `
+          <div class="timestamp">${timestamp} ${direction}</div>
+          <div class="method">${method}</div>
+          <pre>${JSON.stringify(data, null, 2)}</pre>
+        `
+
+        logContainer.appendChild(entry)
+        logContainer.scrollTop = logContainer.scrollHeight
+      }
+
+      // Handle messages from the app iframe
+      window.addEventListener('message', (event) => {
+        // In production, validate event.origin
+        const message = event.data
+
+        if (!message || !message.jsonrpc) return
+
+        log(message.method || 'response', message)
+
+        // Handle JSON-RPC requests from the app
+        if (message.method) {
+          handleAppRequest(message)
+        }
+      })
+
+      function handleAppRequest(message) {
+        const { id, method, params } = message
+
+        switch (method) {
+          case 'updateModelContext':
+            // This is the main output from location-picker
+            currentContext = params.context
+            updateContextDisplay()
+            sendResponse(id, { success: true })
+            break
+
+          case 'callServerTool':
+            // Handle tool calls (e.g., geocode)
+            handleToolCall(id, params)
+            break
+
+          case 'log':
+            // App logging
+            console.log('[App]', params.level, params.message)
+            sendResponse(id, { success: true })
+            break
+
+          case 'getTheme':
+            // Return dark theme for dev
+            sendResponse(id, { theme: 'dark' })
+            break
+
+          default:
+            sendResponse(id, null, { code: -32601, message: `Method not found: ${method}` })
+        }
+      }
+
+      function handleToolCall(id, params) {
+        const { toolName, arguments: args } = params
+
+        // Mock tool responses for development
+        if (toolName === 'geocode') {
+          // Simulate geocode response
+          setTimeout(() => {
+            sendResponse(id, {
+              result: [
+                {
+                  name: args.city || 'Berlin',
+                  country: args.country || 'Germany',
+                  latitude: 52.52,
+                  longitude: 13.405,
+                  population: 3748148,
+                },
+              ],
+            })
+          }, 300)
+        } else {
+          sendResponse(id, null, { code: -32601, message: `Unknown tool: ${toolName}` })
+        }
+      }
+
+      function sendResponse(id, result, error = null) {
+        const response = {
+          jsonrpc: '2.0',
+          id,
+        }
+
+        if (error) {
+          response.error = error
+        } else {
+          response.result = result
+        }
+
+        log('response', response, true)
+        appFrame.contentWindow.postMessage(response, '*')
+      }
+
+      function updateContextDisplay() {
+        if (currentContext && currentContext.location) {
+          const loc = currentContext.location
+          contextValue.className = 'value'
+          contextValue.textContent = `${loc.name || 'Selected'} (${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)})`
+        } else {
+          contextValue.className = 'value empty'
+          contextValue.textContent = 'No location selected'
+        }
+      }
+
+      // Send initial context to app when it loads
+      appFrame.addEventListener('load', () => {
+        log('init', { message: 'App iframe loaded' })
+      })
+    </script>
+  </body>
+</html>
