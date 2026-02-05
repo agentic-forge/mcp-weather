@@ -11,6 +11,9 @@ from httpx import Response
 
 from forge_mcp_weather.server import client, mcp
 
+# Access the underlying function from FastMCP's FunctionTool wrapper
+_pick_location_fn = mcp._tool_manager._tools["pick_location"].fn
+
 from .fixtures import (
     AIR_QUALITY_POLLEN_RESPONSE,
     AIR_QUALITY_RESPONSE,
@@ -179,6 +182,62 @@ class TestGetAirQualityTool:
         assert aq.pollen is not None
 
 
+class TestPickLocationTool:
+    """Tests for the pick_location tool functionality."""
+
+    async def test_pick_location_returns_ui_metadata(self):
+        """Test that pick_location returns correct _meta.ui structure."""
+        result = await _pick_location_fn()
+
+        assert "_meta" in result
+        assert "ui" in result["_meta"]
+        ui = result["_meta"]["ui"]
+        assert ui["resourceUri"] == "ui://location-picker"
+        assert "geolocation" in ui["permissions"]
+
+    async def test_pick_location_requires_interaction(self):
+        """Test that pick_location sets requiresInteraction flag."""
+        result = await _pick_location_fn()
+
+        ui = result["_meta"]["ui"]
+        assert ui["requiresInteraction"] is True
+
+    async def test_pick_location_no_initial_location(self):
+        """Test pick_location with no arguments returns no initial location."""
+        result = await _pick_location_fn()
+
+        assert result["initial_location"] is None
+
+    async def test_pick_location_with_coordinates(self):
+        """Test pick_location with initial coordinates."""
+        result = await _pick_location_fn(initial_lat=48.85, initial_lng=2.35)
+
+        assert result["initial_location"] is not None
+        assert result["initial_location"]["latitude"] == 48.85
+        assert result["initial_location"]["longitude"] == 2.35
+
+    @respx.mock
+    async def test_pick_location_with_city(self):
+        """Test pick_location with initial city name."""
+        respx.get(
+            "https://geocoding-api.open-meteo.com/v1/search",
+        ).mock(return_value=Response(200, json=GEOCODE_BERLIN_RESPONSE))
+
+        result = await _pick_location_fn(initial_city="Berlin")
+
+        assert result["initial_location"] is not None
+        assert result["initial_location"]["name"] == "Berlin"
+        assert "latitude" in result["initial_location"]
+        assert "longitude" in result["initial_location"]
+
+    async def test_pick_location_has_instructions(self):
+        """Test that pick_location returns user instructions."""
+        result = await _pick_location_fn()
+
+        assert "instructions" in result
+        assert "map" in result["instructions"].lower() or "location" in result["instructions"].lower()
+
+
 class TestServerModule:
     """Tests for the server module itself."""
 
@@ -196,3 +255,4 @@ class TestServerModule:
         assert "get_current_weather" in tools
         assert "get_forecast" in tools
         assert "get_air_quality" in tools
+        assert "pick_location" in tools
