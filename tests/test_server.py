@@ -11,9 +11,6 @@ from httpx import Response
 
 from forge_mcp_weather.server import client, mcp
 
-# Access the underlying function from FastMCP's FunctionTool wrapper
-_pick_location_fn = mcp._tool_manager._tools["pick_location"].fn
-
 from .fixtures import (
     AIR_QUALITY_POLLEN_RESPONSE,
     AIR_QUALITY_RESPONSE,
@@ -24,6 +21,9 @@ from .fixtures import (
     GEOCODE_BERLIN_RESPONSE,
     GEOCODE_EMPTY_RESPONSE,
 )
+
+# Access the underlying function from FastMCP's FunctionTool wrapper
+_pick_location_fn = mcp._tool_manager._tools["pick_location"].fn
 
 
 class TestGeocodeTool:
@@ -235,7 +235,8 @@ class TestPickLocationTool:
         result = await _pick_location_fn()
 
         assert "instructions" in result
-        assert "map" in result["instructions"].lower() or "location" in result["instructions"].lower()
+        instructions = result["instructions"].lower()
+        assert "map" in instructions or "location" in instructions
 
 
 class TestServerModule:
